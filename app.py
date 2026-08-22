@@ -414,6 +414,33 @@ def one_hot_transform(rows, col_index, categories):
         matrix.append(row_vec)
     return categories, matrix
 
+#Task - 8
+#Create a new feature based on chol and thalach (e.g., "risk_factor")
+# using a complex formulaincorporating domain knowledge,
+# interaction terms, and percentile-based ranking.
+
+def percentile_rank(values):
+    n = len(values)
+    if n <= 1:
+        return [50.0 for _ in values]
+    order = sorted(range(n), key=lambda i: values[i])
+    ranks = [0.0] * n
+    for pos, idx in enumerate(order):
+        ranks[idx] = 100.0 * pos / (n - 1)
+    return ranks
+
+
+def compute_risk_factor(chol_values, thalach_values):
+    max_thalach = manual_max(thalach_values) or 1.0
+    raw_scores = []
+    for chol, thalach in zip(chol_values, thalach_values):
+        chol_ratio = chol / 200.0
+        thalach_deficit = 1 - (thalach / max_thalach)
+        interaction = chol_ratio * thalach_deficit
+        raw = 0.5 * chol_ratio + 0.3 * thalach_deficit + 0.2 * interaction
+        raw_scores.append(raw)
+    return percentile_rank(raw_scores), raw_scores
+
 
 SCALING_METHODS = {
     "Min-Max normalization (0-1)": normalize_minmax,
@@ -432,7 +459,8 @@ with st.sidebar:
             "Task-4 Check for duplicate rows",
             "Task-5 Convert categorical columns",
             "Task-6 Normalize or standardize",
-            "Task-7 one-hot encoding"
+            "Task-7 one-hot encoding",
+            "Task-8 Feature Engineering"
         ]
 
     )
@@ -680,3 +708,39 @@ elif section == "Task-7 one-hot encoding":
         grown_categories, matrix = one_hot_transform(working_rows + [sim_row], oh_idx, categories)
         st.write(f"Categories after seeing '{test_val}': {grown_categories}")
         st.caption("Notice a new column was appended and all earlier rows were backfilled with 0 for it — that's the dynamic adaptation.")
+
+elif section == "Task-8 Feature Engineering":
+    st.subheader("Engineered feature")
+
+    lower_headers = [h.lower() for h in headers]
+    default_chol = headers[lower_headers.index("chol")] if "chol" in lower_headers else headers[0]
+    default_thalach = headers[lower_headers.index("thalach")] if "thalach" in lower_headers else headers[min(1, len(headers) - 1)]
+
+    c1, c2 = st.columns(2)
+    with c1:
+        chol_col = st.selectbox("Cholesterol-like column", options=headers, index=headers.index(default_chol))
+    with c2:
+        thalach_col = st.selectbox("Max-heart-rate-like column (thalach)", options=headers, index=headers.index(default_thalach))
+
+    chol_idx, thalach_idx = headers.index(chol_col), headers.index(thalach_col)
+    chol_vals = column_values_numeric(working_rows, chol_idx)
+    thalach_vals = column_values_numeric(working_rows, thalach_idx)
+
+    if len(chol_vals) != len(thalach_vals) or not chol_vals:
+        st.warning("Selected columns need to be numeric with no missing values for this preview — impute first if needed.")
+    else:
+        risk, raw = compute_risk_factor(chol_vals, thalach_vals)
+        st.write("Preview (first 10 patients):")
+        st.table([
+            {"chol": c, "thalach": t, "risk_factor (percentile 0-100)": round(rf, 1)}
+            for c, t, rf in list(zip(chol_vals, thalach_vals, risk))[:10]
+        ])
+
+        if st.button("Add risk_factor as a new column"):
+            new_rows = [list(r) for r in working_rows]
+            for r, rf in zip(new_rows, risk):
+                r.append(str(round(rf, 3)))
+            st.session_state["rows"] = new_rows
+            st.session_state["headers_override"] = headers + ["risk_factor"]
+            st.success("Added 'risk_factor' column.")
+            st.rerun()
