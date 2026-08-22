@@ -530,7 +530,7 @@ def manual_frequency_polygon_points(centers, counts):
 #Store processed data in a new CSV file without using built-in DataFrame export functions,
 # manually formatting and writing the data while ensuring optimal storage efficiency.
 
-def manual_write_csv(headers, rows):
+def manual_write(headers, rows):
 
     def format_cell(cell):
         cell = "" if cell is None else str(cell)
@@ -970,7 +970,7 @@ elif section == "Task-12 Download Processed Data":
      st.table([dict(zip(export_headers, r)) for r in export_rows[:5]])
      st.caption("Preview of first 5 rows that will be exported.")
 
-     csv_text = manual_write_csv(export_headers, export_rows)
+     csv_text = manual_write(export_headers, export_rows)
      st.download_button(
         label="Download processed_heart_disease.csv",
         data=csv_text.encode("utf-8"),
