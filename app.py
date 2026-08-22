@@ -305,6 +305,35 @@ def remove_duplicates(rows):
     dup_idx = set(find_duplicates(rows))
     return [r for i, r in enumerate(rows) if i not in dup_idx]
 
+#Task - 5
+#Convert categorical columns (sex, cp, thal, etc.) into numerical 
+# form without using built-in encoding functions, 
+#manually mapping categories and handling unknown values dynamically.
+
+def label_encode_fit(rows, col_index):
+    mapping = {}
+    next_code = 0
+    for r in rows:
+        v = r[col_index].strip()
+        if v not in mapping and not is_missing(v):
+            mapping[v] = next_code
+            next_code += 1
+    return mapping
+
+
+def label_encode_transform(rows, col_index, mapping):
+    new_rows = [list(r) for r in rows]
+    next_code = (max(mapping.values()) + 1) if mapping else 0
+    for r in new_rows:
+        v = r[col_index].strip()
+        if is_missing(v):
+            continue
+        if v not in mapping:
+            mapping[v] = next_code
+            next_code += 1
+        r[col_index] = str(mapping[v])
+    return new_rows, mapping
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -313,7 +342,8 @@ with st.sidebar:
             "Task-1 Load & Browse",
             "Task-2 Summary Statistics",
             "Task-3 Identify missing values",
-            "Task-4 Check for duplicate rows"
+            "Task-4 Check for duplicate rows",
+            "Task-5 Convert categorical columns"
         ]
 
     )
@@ -480,3 +510,21 @@ elif section == "Task-4 Check for duplicate rows":
             st.rerun()
     else:
         st.success("No duplicate rows detected.")
+
+elif section == "Task-5 Convert categorical columns":
+    st.subheader("Manual categorical → numeric encoding")
+    cat_col = st.selectbox("Column to encode", options=headers, key="label_enc_col")
+    col_idx = headers.index(cat_col)
+
+    if st.button("Fit & apply label encoding"):
+        mapping = label_encode_fit(working_rows, col_idx)
+        new_rows, mapping = label_encode_transform(working_rows, col_idx, mapping)
+        st.session_state["rows"] = new_rows
+        st.session_state["label_map_" + cat_col] = mapping
+        st.success(f"Encoded '{cat_col}' with {len(mapping)} categories.")
+        st.rerun()
+
+    map_key = "label_map_" + cat_col
+    if map_key in st.session_state:
+        st.write("Category → code mapping:")
+        st.table([{"category": k, "code": v} for k, v in sorted(st.session_state[map_key].items(), key=lambda x: x[1])])
