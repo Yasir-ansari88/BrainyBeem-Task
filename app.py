@@ -526,6 +526,23 @@ def manual_frequency_polygon_points(centers, counts):
     ys = [0] + list(counts) + [0]
     return xs, ys
 
+#Task-12
+#Store processed data in a new CSV file without using built-in DataFrame export functions,
+# manually formatting and writing the data while ensuring optimal storage efficiency.
+
+def manual_write_csv(headers, rows):
+
+    def format_cell(cell):
+        cell = "" if cell is None else str(cell)
+        if "," in cell or '"' in cell or "\n" in cell:
+            cell = '"' + cell.replace('"', '""') + '"'
+        return cell
+
+    lines = [",".join(format_cell(h) for h in headers)]
+    for r in rows:
+        lines.append(",".join(format_cell(c) for c in r))
+    return "\n".join(lines)
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -541,7 +558,8 @@ with st.sidebar:
             "Task-8 Feature Engineering",
             "Task-9 Histogram",
             "Task-10 Boxplot",
-            "Task-11 Visualize numerical columns"
+            "Task-11 Visualize numerical columns",
+            "Task-12 Download Processed Data"
 
         ]
 
@@ -941,3 +959,21 @@ elif section == "Task-11 Visualize numerical columns":
         ax4.spines["top"].set_visible(False)
         ax4.spines["right"].set_visible(False)
         st.pyplot(fig4)
+
+elif section == "Task-12 Download Processed Data":
+     st.subheader("Export processed data to a new CSV file")
+
+     export_headers = st.session_state.get("headers_override", headers)
+     export_rows = st.session_state["rows"]
+
+     st.write(f"Current in-memory dataset: {len(export_rows)} rows × {len(export_headers)} columns.")
+     st.table([dict(zip(export_headers, r)) for r in export_rows[:5]])
+     st.caption("Preview of first 5 rows that will be exported.")
+
+     csv_text = manual_write_csv(export_headers, export_rows)
+     st.download_button(
+        label="Download processed_heart_disease.csv",
+        data=csv_text.encode("utf-8"),
+        file_name="processed_heart_disease.csv",
+        mime="text/csv",
+    )
