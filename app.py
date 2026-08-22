@@ -571,6 +571,31 @@ def interpolate_color(value, vmin, vmax, low=(0.80, 0.88, 1.0), high=(0.05, 0.25
 def dynamic_bar_width(num_categories):
     return max(0.25, min(0.8, 8.0 / max(num_categories, 1)))
 
+#Task-14
+#Create a heatmap of missing values (if applicable) using a manually constructed grid, mapping missing data 
+#points with custom color gradients instead of using Seaborn or Matplotlib heatmap functions.
+
+def build_missing_matrix(rows):
+    """1 = missing, 0 = present, cell by cell (manual, no .isna())."""
+    return [[1 if is_missing(v) else 0 for v in r] for r in rows]
+
+
+def draw_missing_grid_patches(ax, matrix, col_labels, row_limit=120):
+    display_matrix = matrix[:row_limit]
+    nrows = len(display_matrix)
+    ncols = len(col_labels)
+    for i, row in enumerate(display_matrix):
+        for j, val in enumerate(row):
+            color = interpolate_color(val, 0, 1, low=(0.93, 0.96, 1.0), high=(0.75, 0.08, 0.08))
+            rect = patches.Rectangle((j, nrows - 1 - i), 1, 1, facecolor=color, edgecolor="white", linewidth=0.3)
+            ax.add_patch(rect)
+    ax.set_xlim(0, ncols)
+    ax.set_ylim(0, nrows)
+    ax.set_xticks([j + 0.5 for j in range(ncols)])
+    ax.set_xticklabels(col_labels, rotation=90, fontsize=7)
+    ax.set_yticks([])
+    return nrows
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -588,7 +613,8 @@ with st.sidebar:
             "Task-10 Boxplot",
             "Task-11 Visualize numerical columns",
             "Task-12 Download Processed Data",
-            "Task-13 plots for categorical variables"
+            "Task-13 plots for categorical variables",
+            "Task-14 heatmap of missing values"
 
         ]
 
@@ -1039,4 +1065,27 @@ elif section == "Task-13 plots for categorical variables":
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         st.pyplot(fig)
-        
+
+elif section == "Task-14 heatmap of missing values":
+    st.subheader("Missing-value heatmap")
+
+    matrix = build_missing_matrix(working_rows)
+    total_missing = sum(sum(r) for r in matrix)
+
+    if total_missing == 0:
+        st.success("No missing values in the current dataset — nothing to map.")
+    else:
+        max_rows_to_draw = st.slider("Rows to render in the grid", 10, min(300, len(matrix)), min(120, len(matrix)))
+        fig, ax = plt.subplots(figsize=(max(6, 0.35 * len(headers)), max(4, 0.08 * max_rows_to_draw)))
+        drawn = draw_missing_grid_patches(ax, matrix, headers, row_limit=max_rows_to_draw)
+        ax.set_title(f"Missing-value grid — first {drawn} of {len(matrix)} rows (red = missing, blue = present)")
+        st.pyplot(fig)
+
+        st.markdown("---")
+        st.markdown("#### Missing % by column")
+        col_missing_pct = [
+            {"column": h, "missing_count": sum(r[i] for r in matrix), "missing_pct": round(100 * sum(r[i] for r in matrix) / len(matrix), 2)}
+            for i, h in enumerate(headers)
+        ]
+        col_missing_pct.sort(key=lambda d: -d["missing_pct"])
+        st.table(col_missing_pct)
