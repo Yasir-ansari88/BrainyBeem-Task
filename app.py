@@ -596,6 +596,51 @@ def draw_missing_grid_patches(ax, matrix, col_labels, row_limit=120):
     ax.set_yticks([])
     return nrows
 
+#Task-15
+#Display pair plots for correlated features by manually computing correlation coefficients, 
+#selecting highly correlated pairs dynamically, and plotting scatter plots with trendlines
+#using low-level plotting functions.
+
+def pearson_correlation(x, y):
+    """Manual Pearson correlation coefficient (no numpy.corrcoef / pandas .corr())."""
+    n = len(x)
+    if n < 2:
+        return None
+    mean_x, mean_y = manual_mean(x), manual_mean(y)
+    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+    var_x = sum((xi - mean_x) ** 2 for xi in x)
+    var_y = sum((yi - mean_y) ** 2 for yi in y)
+    denom = math.sqrt(var_x * var_y)
+    return cov / denom if denom else 0.0
+
+
+def manual_linear_fit(x, y):
+    """Least-squares slope/intercept, computed by hand (no numpy.polyfit)."""
+    n = len(x)
+    mean_x, mean_y = manual_mean(x), manual_mean(y)
+    num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+    den = sum((xi - mean_x) ** 2 for xi in x)
+    slope = num / den if den else 0.0
+    intercept = mean_y - slope * mean_x
+    return slope, intercept
+
+
+def compute_correlation_pairs(headers, rows, numeric_col_indices):
+    pairs = []
+    for a in range(len(numeric_col_indices)):
+        for b in range(a + 1, len(numeric_col_indices)):
+            i, j = numeric_col_indices[a], numeric_col_indices[b]
+            xs, ys = [], []
+            for r in rows:
+                nx, ny = try_to_number(r[i]), try_to_number(r[j])
+                if nx is not None and ny is not None:
+                    xs.append(nx)
+                    ys.append(ny)
+            if len(xs) >= 2:
+                r_val = pearson_correlation(xs, ys)
+                pairs.append({"col_a": headers[i], "col_b": headers[j], "idx_a": i, "idx_b": j, "r": r_val, "n": len(xs)})
+    return pairs
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -614,8 +659,8 @@ with st.sidebar:
             "Task-11 Visualize numerical columns",
             "Task-12 Download Processed Data",
             "Task-13 plots for categorical variables",
-            "Task-14 heatmap of missing values"
-
+            "Task-14 heatmap of missing values",
+            "Task-15 plots for correlated features"
         ]
 
     )
@@ -1089,3 +1134,59 @@ elif section == "Task-14 heatmap of missing values":
         ]
         col_missing_pct.sort(key=lambda d: -d["missing_pct"])
         st.table(col_missing_pct)
+
+elif section == "Task-15 plots for correlated features":
+    st.subheader("Pair plots for correlated features")
+    numeric_idx = [i for i, h in enumerate(headers) if column_values_numeric(working_rows, i)]
+
+    if len(numeric_idx) < 2:
+        st.warning("Need at least 2 numeric columns to compute correlations.")
+    else:
+        pairs = compute_correlation_pairs(headers, working_rows, numeric_idx)
+        pairs = [p for p in pairs if p["r"] is not None]
+        pairs.sort(key=lambda p: -abs(p["r"]))
+
+        threshold = st.slider("Minimum |correlation| to consider 'highly correlated'", 0.0, 1.0, 0.3, 0.05)
+        top_n = st.slider("Max number of pairs to plot", 1, min(12, max(1, len(pairs))), min(6, len(pairs)) if pairs else 1)
+
+        selected_pairs = [p for p in pairs if abs(p["r"]) >= threshold][:top_n]
+
+        st.markdown("#### Correlation ranking")
+        st.table([{"feature_A": p["col_a"], "feature_B": p["col_b"], "r": round(p["r"], 3), "n": p["n"]} for p in pairs[:15]])
+
+        if not selected_pairs:
+            st.info(f"No pairs meet the |r| ≥ {threshold} threshold — lower the slider to see plots.")
+        else:
+            ncols = 3
+            nrows = math.ceil(len(selected_pairs) / ncols)
+            fig, axes = plt.subplots(nrows, ncols, figsize=(4.2 * ncols, 3.6 * nrows))
+            axes = axes.flatten() if len(selected_pairs) > 1 else [axes]
+
+            for k, p in enumerate(selected_pairs):
+                xs, ys = [], []
+                for r in working_rows:
+                    nx, ny = try_to_number(r[p["idx_a"]]), try_to_number(r[p["idx_b"]])
+                    if nx is not None and ny is not None:
+                        xs.append(nx)
+                        ys.append(ny)
+                ax = axes[k]
+                ax.scatter(xs, ys, s=14, alpha=0.6, color="#4C72B0", edgecolor="none")
+
+                slope, intercept = manual_linear_fit(xs, ys)
+                x_line = [manual_min(xs), manual_max(xs)]
+                y_line = [slope * x + intercept for x in x_line]
+                ax.plot(x_line, y_line, color="red", linewidth=1.5)
+
+                ax.set_xlabel(p["col_a"], fontsize=8)
+                ax.set_ylabel(p["col_b"], fontsize=8)
+                ax.set_title(f"r = {p['r']:.2f}", fontsize=9, fontweight="bold")
+                ax.tick_params(labelsize=7)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+
+            for j in range(len(selected_pairs), len(axes)):
+                fig.delaxes(axes[j])
+
+            fig.suptitle("Highly Correlated Feature Pairs", fontsize=13, fontweight="bold", y=1.02)
+            fig.tight_layout()
+            st.pyplot(fig)
