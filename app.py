@@ -448,6 +448,25 @@ SCALING_METHODS = {
     "Robust scaling (median/IQR)": scale_robust,
 }
 
+#Task-9 
+#Create histograms for all numerical features without using built-in plotting functions,
+# implementing binning and frequency calculations manually.
+
+def manual_histogram_bins(values, num_bins=10):
+    lo, hi = manual_min(values), manual_max(values)
+    if lo is None or hi == lo:
+        return [lo], [len(values)]
+    width = (hi - lo) / num_bins
+    edges = [lo + i * width for i in range(num_bins + 1)]
+    counts = [0] * num_bins
+    for v in values:
+        idx = int((v - lo) / width) if width else 0
+        if idx >= num_bins:
+            idx = num_bins - 1
+        counts[idx] += 1
+    centers = [(edges[i] + edges[i + 1]) / 2 for i in range(num_bins)]
+    return centers, counts, edges, width
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -460,7 +479,8 @@ with st.sidebar:
             "Task-5 Convert categorical columns",
             "Task-6 Normalize or standardize",
             "Task-7 one-hot encoding",
-            "Task-8 Feature Engineering"
+            "Task-8 Feature Engineering",
+            "Task-9 Histogram"
         ]
 
     )
@@ -744,3 +764,21 @@ elif section == "Task-8 Feature Engineering":
             st.session_state["headers_override"] = headers + ["risk_factor"]
             st.success("Added 'risk_factor' column.")
             st.rerun()
+
+elif section == "Task-9 Histogram":
+    st.subheader("Histograms")
+
+    plot_numeric_cols = [h for i, h in enumerate(headers) if column_values_numeric(working_rows, i)]
+
+    st.markdown("#### Single-column histogram (manual binning)")
+    hist_col = st.selectbox("Column", options=plot_numeric_cols, key="hist_col")
+    num_bins = st.slider("Number of bins", 5, 30, 10)
+    hvals = column_values_numeric(working_rows, headers.index(hist_col))
+    centers, counts, edges, width = manual_histogram_bins(hvals, num_bins)
+
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    ax.bar(centers, counts, width=width * 0.9, color="#4C72B0", edgecolor="black")
+    ax.set_title(f"Histogram of {hist_col} (manual binning)")
+    ax.set_xlabel(hist_col)
+    ax.set_ylabel("Frequency")
+    st.pyplot(fig)
