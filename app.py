@@ -543,6 +543,34 @@ def manual_write(headers, rows):
         lines.append(",".join(format_cell(c) for c in r))
     return "\n".join(lines)
 
+#Task-13
+#Display bar plots for categorical variables without using high-level plotting libraries,
+# dynamically adjusting bar widths and colors for better interpretation.
+
+def category_counts(rows, col_index):
+    counts = {}
+    for r in rows:
+        v = r[col_index].strip()
+        if not is_missing(v):
+            counts[v] = counts.get(v, 0) + 1
+    return counts
+
+
+def interpolate_color(value, vmin, vmax, low=(0.80, 0.88, 1.0), high=(0.05, 0.25, 0.55)):
+    if vmax == vmin:
+        t = 0.5
+    else:
+        t = (value - vmin) / (vmax - vmin)
+    t = max(0.0, min(1.0, t))
+    r = low[0] + (high[0] - low[0]) * t
+    g = low[1] + (high[1] - low[1]) * t
+    b = low[2] + (high[2] - low[2]) * t
+    return (r, g, b)
+
+
+def dynamic_bar_width(num_categories):
+    return max(0.25, min(0.8, 8.0 / max(num_categories, 1)))
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -559,7 +587,8 @@ with st.sidebar:
             "Task-9 Histogram",
             "Task-10 Boxplot",
             "Task-11 Visualize numerical columns",
-            "Task-12 Download Processed Data"
+            "Task-12 Download Processed Data",
+            "Task-13 plots for categorical variables"
 
         ]
 
@@ -977,3 +1006,37 @@ elif section == "Task-12 Download Processed Data":
         file_name="processed_heart_disease.csv",
         mime="text/csv",
     )
+
+elif section == "Task-13 plots for categorical variables":
+    st.subheader("Bar plots for categorical variables ")
+    
+    cat_col_choice = st.selectbox("Column to plot", options=headers, key="bar_cat_col")
+    cidx = headers.index(cat_col_choice)
+    counts = category_counts(working_rows, cidx)
+
+    if not counts:
+        st.warning("No non-missing values found in this column.")
+    else:
+        cats = list(counts.keys())
+        vals = list(counts.values())
+        order = sorted(range(len(cats)), key=lambda i: -vals[i])
+        cats = [cats[i] for i in order]
+        vals = [vals[i] for i in order]
+
+        width = dynamic_bar_width(len(cats))
+        vmax = max(vals)
+        colors = [interpolate_color(v, 0, vmax) for v in vals]
+
+        fig, ax = plt.subplots(figsize=(max(5, 0.6 * len(cats)), 4))
+        x_positions = list(range(len(cats)))
+        ax.bar(x_positions, vals, width=width, color=colors, edgecolor="black", linewidth=0.5)
+        for xp, v in zip(x_positions, vals):
+            ax.text(xp, v, str(v), ha="center", va="bottom", fontsize=8)
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(cats, rotation=45 if len(cats) > 6 else 0, ha="right" if len(cats) > 6 else "center")
+        ax.set_ylabel("Count")
+        ax.set_title(f"Category distribution — {cat_col_choice}  (bar width={width:.2f}, {len(cats)} categories)")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        st.pyplot(fig)
+        
