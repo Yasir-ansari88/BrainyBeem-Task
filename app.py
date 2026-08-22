@@ -129,7 +129,7 @@ def manual_min(values):
             m = v
     return m
 
-def manal_max(values):
+def manual_max(values):
     if not values:
         return None
     m = values[0]
@@ -159,7 +159,7 @@ def summarize_column(row, col_index):
         "median" : manual_median(values),
         "mode" : manual_mode(values),
         "min" : manual_min(values),
-        "max" : manal_max(values),
+        "max" : manual_max(values),
         "std" : manual_std(values, mean_v)
     }
     
@@ -334,6 +334,57 @@ def label_encode_transform(rows, col_index, mapping):
         r[col_index] = str(mapping[v])
     return new_rows, mapping
 
+#Task-6 
+#Normalize or standardize numerical features using manual calculations instead of built-in functions, 
+#ensuring robust handling of outliers and skewed distributions.
+
+def manual_quantile(sorted_values, q):
+    if not sorted_values:
+        return None
+    n = len(sorted_values)
+    if n == 1:
+        return sorted_values[0]
+    pos = q * (n - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return sorted_values[lo]
+    frac = pos - lo
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * frac
+
+
+def normalize_minmax(values):
+    lo, hi = manual_min(values), manual_max(values)
+    if lo is None or hi == lo:
+        return [0.0 for _ in values]
+    return [(v - lo) / (hi - lo) for v in values]
+
+
+def standardize_zscore(values):
+    mean_v = manual_mean(values)
+    std_v = manual_std(values, mean_v)
+    if not std_v:
+        return [0.0 for _ in values]
+    return [(v - mean_v) / std_v for v in values]
+
+
+def scale_robust(values):
+    s = sorted(values)
+    q1 = manual_quantile(s, 0.25)
+    med = manual_quantile(s, 0.5)
+    q3 = manual_quantile(s, 0.75)
+    iqr = q3 - q1
+    if not iqr:
+        return [0.0 for _ in values]
+    return [(v - med) / iqr for v in values]
+
+
+SCALING_METHODS = {
+    "Min-Max normalization (0-1)": normalize_minmax,
+    "Z-score standardization": standardize_zscore,
+    "Robust scaling (median/IQR)": scale_robust,
+}
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -343,10 +394,12 @@ with st.sidebar:
             "Task-2 Summary Statistics",
             "Task-3 Identify missing values",
             "Task-4 Check for duplicate rows",
-            "Task-5 Convert categorical columns"
+            "Task-5 Convert categorical columns",
+            "Task-6 Normalize or standardize"
         ]
 
     )
+
 
 st.title("Heart Disease Prediction — Data Explorer")
 st.caption("All parsing, statistics, and missing-value handling below are implemented manually ")
@@ -528,3 +581,31 @@ elif section == "Task-5 Convert categorical columns":
     if map_key in st.session_state:
         st.write("Category → code mapping:")
         st.table([{"category": k, "code": v} for k, v in sorted(st.session_state[map_key].items(), key=lambda x: x[1])])
+
+elif section == "Task-6 Normalize or standardize":
+    st.subheader("Manual normalization / standardization")
+    numeric_cols = [h for i, h in enumerate(headers) if column_values_numeric(working_rows, i)]
+    scale_col = st.selectbox("Column to scale", options=numeric_cols, key="scale_col")
+    method_name = st.selectbox("Method", options=list(SCALING_METHODS.keys()), key="scale_method")
+
+    col_idx = headers.index(scale_col)
+    values = column_values_numeric(working_rows, col_idx)
+    scaled = SCALING_METHODS[method_name](values)
+
+    st.write("Preview (first 10 values):")
+    st.table([{"original": round(o, 3), "scaled": round(s, 4)} for o, s in list(zip(values, scaled))[:10]])
+
+    if "Robust" in method_name:
+        st.info("Robust scaling centers on the median and divides by IQR instead of mean/std, so extreme outliers don't dominate the scale — the right default for skewed clinical measurements like cholesterol.")
+
+    if st.button("Apply scaling to this column"):
+        new_rows = [list(r) for r in working_rows]
+        vi = 0
+        for r in new_rows:
+            n = try_to_number(r[col_idx])
+            if n is not None:
+                r[col_idx] = str(round(scaled[vi], 6))
+                vi += 1
+        st.session_state["rows"] = new_rows
+        st.success(f"Applied {method_name} to '{scale_col}'.")
+        st.rerun()
