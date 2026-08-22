@@ -504,6 +504,28 @@ def draw_manual_boxplot(ax, values, x_pos=1, width=0.5, label=""):
                     marker="o", facecolors="none", edgecolors="darkred", s=25)
     return stats
 
+#task-11
+#Visualize the distribution of all numerical columns using only raw Matplotlib commands,
+# ensuring custom aesthetics, annotations, and multiple comparative plots for deeper insights.
+
+def manual_skewness(values, mean_val, std_val):
+    n = len(values)
+    if n < 3 or not std_val:
+        return 0.0
+    total_cubed = 0.0
+    for v in values:
+        total_cubed += ((v - mean_val) / std_val) ** 3
+    return (n / ((n - 1) * (n - 2))) * total_cubed
+
+
+def manual_frequency_polygon_points(centers, counts):
+    if not centers:
+        return [], []
+    step = centers[1] - centers[0] if len(centers) > 1 else 1
+    xs = [centers[0] - step] + list(centers) + [centers[-1] + step]
+    ys = [0] + list(counts) + [0]
+    return xs, ys
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -518,7 +540,8 @@ with st.sidebar:
             "Task-7 one-hot encoding",
             "Task-8 Feature Engineering",
             "Task-9 Histogram",
-            "Task-10 Boxplot"
+            "Task-10 Boxplot",
+            "Task-11 Visualize numerical columns"
 
         ]
 
@@ -839,3 +862,82 @@ elif section == "Task-10 Boxplot":
         "IQR": round(stats["iqr"], 2), "lower_fence": round(stats["lower_fence"], 2),
         "upper_fence": round(stats["upper_fence"], 2), "outlier_count": len(stats["outliers"]),
     }])
+
+elif section == "Task-11 Visualize numerical columns":
+    st.subheader("Distribution of all numerical columns — raw Matplotlib, custom aesthetics & annotations")
+    st.caption("Every column, one comparative figure. No plt.hist()/sns.histplot() — bars, lines, and annotations are all drawn with raw Matplotlib primitives (ax.bar, ax.plot, ax.axvline, ax.text).")
+
+    dist_cols = [h for i, h in enumerate(headers) if column_values_numeric(working_rows, i)]
+
+    if not dist_cols:
+        st.warning("No numeric columns detected.")
+    else:
+        ncols = 3
+        nrows = math.ceil(len(dist_cols) / ncols)
+        plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4.3 * ncols, 3.2 * nrows))
+        axes = axes.flatten() if len(dist_cols) > 1 else [axes]
+
+        palette = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2", "#937860", "#DA8BC3", "#8C8C8C"]
+
+        for i, col in enumerate(dist_cols):
+            vals = column_values_numeric(working_rows, headers.index(col))
+            ax = axes[i]
+            color = palette[i % len(palette)]
+
+            
+            centers, counts, edges, width = manual_histogram_bins(vals, 12)
+            ax.bar(centers, counts, width=width * 0.92, color=color, edgecolor="white", alpha=0.85, zorder=2)
+
+            
+            fx, fy = manual_frequency_polygon_points(centers, counts)
+            ax.plot(fx, fy, color="black", linewidth=1.2, alpha=0.6, zorder=3)
+
+            
+            mean_v = manual_mean(vals)
+            med_v = manual_median(vals)
+            std_v = manual_std(vals, mean_v)
+            skew_v = manual_skewness(vals, mean_v, std_v)
+
+            ax.axvline(mean_v, color="red", linestyle="--", linewidth=1.1, zorder=4)
+            ax.axvline(med_v, color="blue", linestyle=":", linewidth=1.1, zorder=4)
+
+            ax.text(
+                0.98, 0.95,
+                f"mean={mean_v:.1f}\nmedian={med_v:.1f}\nskew={skew_v:.2f}",
+                transform=ax.transAxes, ha="right", va="top", fontsize=7.5,
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.75, edgecolor="lightgray"),
+            )
+
+            skew_tag = "right-skewed" if skew_v > 0.5 else ("left-skewed" if skew_v < -0.5 else "~symmetric")
+            ax.set_title(f"{col}  ({skew_tag})", fontsize=10, fontweight="bold")
+            ax.set_xlabel(col, fontsize=8)
+            ax.set_ylabel("Frequency", fontsize=8)
+            ax.tick_params(labelsize=7)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+
+        for j in range(len(dist_cols), len(axes)):
+            fig.delaxes(axes[j])
+
+        fig.suptitle("Numerical Feature Distributions — Heart Disease Dataset", fontsize=13, fontweight="bold", y=1.02)
+        fig.tight_layout()
+        st.pyplot(fig)
+
+        st.markdown("---")
+        st.markdown("#### Normalized comparative overlay (all columns, one axis)")
+        st.caption("Each column is min-max scaled to 0-1 so differently-scaled features (age vs. cholesterol) can be compared on the same plot.")
+        fig4, ax4 = plt.subplots(figsize=(7, 4))
+        for i, col in enumerate(dist_cols):
+            vals = column_values_numeric(working_rows, headers.index(col))
+            scaled = normalize_minmax(vals)
+            centers, counts, edges, width = manual_histogram_bins(scaled, 15)
+            fx, fy = manual_frequency_polygon_points(centers, counts)
+            ax4.plot(fx, fy, label=col, color=palette[i % len(palette)], linewidth=1.6)
+        ax4.set_xlabel("Min-max scaled value (0–1)")
+        ax4.set_ylabel("Frequency")
+        ax4.set_title("Comparative distribution overlay (scaled)", fontweight="bold")
+        ax4.legend(fontsize=7, ncol=2)
+        ax4.spines["top"].set_visible(False)
+        ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4)
