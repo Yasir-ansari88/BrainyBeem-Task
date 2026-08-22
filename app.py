@@ -378,6 +378,42 @@ def scale_robust(values):
         return [0.0 for _ in values]
     return [(v - med) / iqr for v in values]
 
+#Task-7
+#Perform one-hot encoding manually by implementing a custom encoding function 
+# that dynamically adapts to new unseen categories in future data.
+
+def one_hot_fit(rows, col_index):
+    categories = []
+    seen = set()
+    for r in rows:
+        v = r[col_index].strip()
+        if not is_missing(v) and v not in seen:
+            seen.add(v)
+            categories.append(v)
+    return sorted(categories)
+
+
+def one_hot_transform(rows, col_index, categories):
+    """
+    Returns (new_headers_suffix, matrix) where matrix[i] is a list of 0/1
+    per category. If a row's value isn't in `categories`, the category list
+    is extended in place (dynamic adaptation to unseen categories) and every
+    previously-built row gets a 0 backfilled for that new column.
+    """
+    categories = list(categories)  # local copy we can grow
+    matrix = []
+    for r in rows:
+        v = r[col_index].strip()
+        if not is_missing(v) and v not in categories:
+            categories.append(v)
+            for prev in matrix:
+                prev.append(0)
+        row_vec = [0] * len(categories)
+        if not is_missing(v):
+            row_vec[categories.index(v)] = 1
+        matrix.append(row_vec)
+    return categories, matrix
+
 
 SCALING_METHODS = {
     "Min-Max normalization (0-1)": normalize_minmax,
@@ -395,7 +431,8 @@ with st.sidebar:
             "Task-3 Identify missing values",
             "Task-4 Check for duplicate rows",
             "Task-5 Convert categorical columns",
-            "Task-6 Normalize or standardize"
+            "Task-6 Normalize or standardize",
+            "Task-7 one-hot encoding"
         ]
 
     )
@@ -609,3 +646,37 @@ elif section == "Task-6 Normalize or standardize":
         st.session_state["rows"] = new_rows
         st.success(f"Applied {method_name} to '{scale_col}'.")
         st.rerun()
+
+elif section == "Task-7 one-hot encoding":
+    st.subheader("Manual one-hot encoding (dynamically adapts to new categories)")
+
+    oh_col = st.selectbox("Column to one-hot encode", options=headers, key="oh_col")
+    oh_idx = headers.index(oh_col)
+
+    if st.button("Fit & apply one-hot encoding"):
+        categories = one_hot_fit(working_rows, oh_idx)
+        final_categories, matrix = one_hot_transform(working_rows, oh_idx, categories)
+        new_headers = headers[:oh_idx] + headers[oh_idx + 1:] + [f"{oh_col}__{c}" for c in final_categories]
+        new_rows = []
+        for r, vec in zip(working_rows, matrix):
+            base = r[:oh_idx] + r[oh_idx + 1:]
+            new_rows.append(base + [str(x) for x in vec])
+        st.session_state["rows"] = new_rows
+        st.session_state["headers_override"] = new_headers
+        st.success(f"One-hot encoded '{oh_col}' into {len(final_categories)} columns: {', '.join(final_categories)}")
+        st.rerun()
+
+    if "headers_override" in st.session_state:
+        st.info("Headers changed by one-hot encoding — re-upload")
+        headers = st.session_state["headers_override"]
+
+    st.markdown("---")
+    st.markdown("**Try an unseen category (demonstrates dynamic column growth):**")
+    test_val = st.text_input("Type a category value not in the original data")
+    if test_val:
+        categories = one_hot_fit(working_rows, oh_idx)
+        sim_row = list(working_rows[0])
+        sim_row[oh_idx] = test_val
+        grown_categories, matrix = one_hot_transform(working_rows + [sim_row], oh_idx, categories)
+        st.write(f"Categories after seeing '{test_val}': {grown_categories}")
+        st.caption("Notice a new column was appended and all earlier rows were backfilled with 0 for it — that's the dynamic adaptation.")
