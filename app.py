@@ -276,7 +276,34 @@ IMPUTATION_JUSTIFICATIONS = {
         "forward fill — most defensible for ordered/time-series data."
     ),
 }
-    
+
+#Task-4
+#Check for duplicate rows using a custom comparison algorithm, remove them manually, 
+#and analyze how duplicates impact data integrity and machine learning models.
+
+def row_signature(row):
+    sig = []
+    for cell in row:
+        n = try_to_number(cell)
+        sig.append(n if n is not None else cell.strip().lower())
+    return tuple(sig)
+
+
+def find_duplicates(rows):
+    seen = {}
+    duplicate_indices = []
+    for i, r in enumerate(rows):
+        sig = row_signature(r)
+        if sig in seen:
+            duplicate_indices.append(i)
+        else:
+            seen[sig] = i
+    return duplicate_indices
+
+
+def remove_duplicates(rows):
+    dup_idx = set(find_duplicates(rows))
+    return [r for i, r in enumerate(rows) if i not in dup_idx]
 
 with st.sidebar:
     st.markdown("# Navigation")
@@ -285,16 +312,14 @@ with st.sidebar:
         [
             "Task-1 Load & Browse",
             "Task-2 Summary Statistics",
-            "Task-3 Identify missing values"
+            "Task-3 Identify missing values",
+            "Task-4 Check for duplicate rows"
         ]
 
     )
 
 st.title("Heart Disease Prediction — Data Explorer")
-st.caption(
-    "All parsing, statistics, and missing-value handling below are implemented "
-    "manually (no pandas.read_csv, no .describe(), no .isna()/.dropna())."
-)
+st.caption("All parsing, statistics, and missing-value handling below are implemented manually ")
 
 uploaded = st.file_uploader("Upload the heart disease dataset (CSV/TSV/TXT)", type=["csv", "txt", "tsv"])
 
@@ -426,3 +451,32 @@ mean for roughly-normal numeric columns, and mode for categorical columns; avoid
 forward/backward fill unless row order is genuinely meaningful.
             """
         )
+
+elif section == "Task-4 Check for duplicate rows":
+    st.subheader("Duplicate detection & removal")
+    dup_indices = find_duplicates(working_rows)
+    st.metric("Duplicate rows found", len(dup_indices))
+
+    if dup_indices:
+        preview = [{"row_index": i, **dict(zip(headers, working_rows[i]))} for i in dup_indices[:20]]
+        st.write("Preview of duplicate rows (first 20):")
+        st.table(preview)
+
+        st.markdown("**Impact on data integrity / ML models if left in:**")
+        st.markdown(
+            f"""
+- Inflates the effective sample size ({len(dup_indices)} of {len(working_rows)} rows are repeats),
+  which biases summary statistics and any class-balance assumptions.
+- If duplicates land across train/test splits, the same patient record can appear in both,
+  causing **data leakage** and artificially inflated validation accuracy.
+- Distance-based models (KNN) and tree splits can overweight duplicated patterns,
+  skewing feature importance.
+            """
+        )
+
+        if st.button("Remove duplicate rows"):
+            st.session_state["rows"] = remove_duplicates(working_rows)
+            st.success(f"Removed {len(dup_indices)} duplicate rows. New row count: {len(st.session_state['rows'])}")
+            st.rerun()
+    else:
+        st.success("No duplicate rows detected.")
