@@ -467,6 +467,43 @@ def manual_histogram_bins(values, num_bins=10):
     centers = [(edges[i] + edges[i + 1]) / 2 for i in range(num_bins)]
     return centers, counts, edges, width
 
+#Task-10
+#Generate box plots to identify outliers by computing quartiles, IQR, and fences manually,
+# and visualize them using raw Matplotlib drawing functions.
+
+def manual_boxplot_stats(values):
+    s = sorted(values)
+    q1 = manual_quantile(s, 0.25)
+    med = manual_quantile(s, 0.5)
+    q3 = manual_quantile(s, 0.75)
+    iqr = q3 - q1
+    lower_fence = q1 - 1.5 * iqr
+    upper_fence = q3 + 1.5 * iqr
+    inliers = [v for v in s if lower_fence <= v <= upper_fence]
+    whisker_lo = manual_min(inliers) if inliers else q1
+    whisker_hi = manual_max(inliers) if inliers else q3
+    outliers = [v for v in s if v < lower_fence or v > upper_fence]
+    return {
+        "q1": q1, "median": med, "q3": q3, "iqr": iqr,
+        "lower_fence": lower_fence, "upper_fence": upper_fence,
+        "whisker_lo": whisker_lo, "whisker_hi": whisker_hi,
+        "outliers": outliers,
+    }
+def draw_manual_boxplot(ax, values, x_pos=1, width=0.5, label=""):
+    stats = manual_boxplot_stats(values)
+    box = patches.Rectangle((x_pos - width / 2, stats["q1"]), width,
+                             stats["q3"] - stats["q1"], fill=False, edgecolor="black", linewidth=1.5)
+    ax.add_patch(box)
+    ax.hlines(stats["median"], x_pos - width / 2, x_pos + width / 2, color="red", linewidth=1.5)
+    ax.vlines(x_pos, stats["q1"], stats["whisker_lo"], color="black", linestyle="--", linewidth=1)
+    ax.vlines(x_pos, stats["q3"], stats["whisker_hi"], color="black", linestyle="--", linewidth=1)
+    ax.hlines(stats["whisker_lo"], x_pos - width / 4, x_pos + width / 4, color="black")
+    ax.hlines(stats["whisker_hi"], x_pos - width / 4, x_pos + width / 4, color="black")
+    if stats["outliers"]:
+        ax.scatter([x_pos] * len(stats["outliers"]), stats["outliers"],
+                    marker="o", facecolors="none", edgecolors="darkred", s=25)
+    return stats
+
 with st.sidebar:
     st.markdown("# Navigation")
     section = st.radio(
@@ -480,7 +517,9 @@ with st.sidebar:
             "Task-6 Normalize or standardize",
             "Task-7 one-hot encoding",
             "Task-8 Feature Engineering",
-            "Task-9 Histogram"
+            "Task-9 Histogram",
+            "Task-10 Boxplot"
+
         ]
 
     )
@@ -782,3 +821,21 @@ elif section == "Task-9 Histogram":
     ax.set_xlabel(hist_col)
     ax.set_ylabel("Frequency")
     st.pyplot(fig)
+
+elif section == "Task-10 Boxplot":
+    st.subheader("Box plot with manually computed quartiles / IQR / fences")
+    plot_numeric_cols = [h for i, h in enumerate(headers) if column_values_numeric(working_rows, i)]
+    box_col = st.selectbox("Column", options=plot_numeric_cols, key="box_col")
+    bvals = column_values_numeric(working_rows, headers.index(box_col))
+    fig2, ax2 = plt.subplots(figsize=(3, 4))
+    stats = draw_manual_boxplot(ax2, bvals, x_pos=1, label=box_col)
+    ax2.set_xlim(0.5, 1.5)
+    ax2.set_xticks([1])
+    ax2.set_xticklabels([box_col])
+    ax2.set_title(f"Box plot of {box_col}")
+    st.pyplot(fig2)
+    st.table([{
+        "Q1": round(stats["q1"], 2), "median": round(stats["median"], 2), "Q3": round(stats["q3"], 2),
+        "IQR": round(stats["iqr"], 2), "lower_fence": round(stats["lower_fence"], 2),
+        "upper_fence": round(stats["upper_fence"], 2), "outlier_count": len(stats["outliers"]),
+    }])
